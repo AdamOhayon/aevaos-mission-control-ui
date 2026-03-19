@@ -28,7 +28,7 @@ export default function LoginPage() {
           "aevaos_session",
           JSON.stringify({ username, loginAt: Date.now() })
         );
-        router.push("/");
+        router.push("/tasks");
       } else {
         setError("Invalid username or password");
       }
