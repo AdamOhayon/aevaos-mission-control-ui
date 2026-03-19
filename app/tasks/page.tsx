@@ -27,16 +27,42 @@ interface Task {
 interface Alert { id: string; level: "warning" | "critical"; type: string; title: string; message: string; taskId?: string; }
 
 // ---- Task Detail Panel ----
-function TaskDetail({ task, onClose, onStatusChange, onDelete }: {
+interface AgentEntry { name: string; emoji: string; status: string; }
+
+function TaskDetail({ task, onClose, onStatusChange, onAssigneeChange, onDelete }: {
   task: Task;
   onClose: () => void;
   onStatusChange: (id: string, status: string) => void;
+  onAssigneeChange: (id: string, assignee: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const [updating, setUpdating] = useState(false);
-  const [note, setNote]         = useState("");
-  const [addingNote, setAdding] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [updating, setUpdating]   = useState(false);
+  const [note, setNote]           = useState("");
+  const [addingNote, setAdding]   = useState(false);
+  const [deleting, setDeleting]   = useState(false);
+  const [agents, setAgents]       = useState<AgentEntry[]>([]);
+  const [assigning, setAssigning] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API}/api/office/agents`)
+      .then(r => r.json())
+      .then(data => {
+        const list = Object.values(data.agents ?? {}) as AgentEntry[];
+        setAgents(list);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function changeAssignee(newAssignee: string) {
+    setAssigning(true);
+    await fetch(`${API}/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignee: newAssignee }),
+    });
+    onAssigneeChange(task.id, newAssignee);
+    setAssigning(false);
+  }
 
   async function changeStatus(newStatus: string) {
     setUpdating(true);
@@ -105,10 +131,26 @@ function TaskDetail({ task, onClose, onStatusChange, onDelete }: {
             </div>
           </div>
 
+          {/* Assign agent */}
+          <div>
+            <p className="text-gray-400 text-xs uppercase tracking-wide mb-2">Assignee</p>
+            <select
+              value={task.assignee ?? ""}
+              onChange={e => changeAssignee(e.target.value)}
+              disabled={assigning}
+              className="w-full bg-gray-800 text-white border border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+            >
+              <option value="">Unassigned</option>
+              {agents.map(a => (
+                <option key={a.name} value={a.name}>{a.emoji} {a.name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Meta */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             {task.assignee && (
-              <div><p className="text-gray-500 text-xs mb-0.5">Assignee</p><p className="text-gray-300">@{task.assignee}</p></div>
+              <div><p className="text-gray-500 text-xs mb-0.5">Assigned to</p><p className="text-gray-300">@{task.assignee}</p></div>
             )}
             {(task.urgency ?? task.priority) && (
               <div><p className="text-gray-500 text-xs mb-0.5">Priority</p>
@@ -405,6 +447,10 @@ export default function TasksPage() {
           onStatusChange={(id, status) => {
             setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
             setSelected(prev => prev ? { ...prev, status } : prev);
+          }}
+          onAssigneeChange={(id, assignee) => {
+            setTasks(prev => prev.map(t => t.id === id ? { ...t, assignee } : t));
+            setSelected(prev => prev ? { ...prev, assignee } : prev);
           }}
           onDelete={(id) => {
             setTasks(prev => prev.filter(t => t.id !== id));

@@ -56,6 +56,17 @@ export default function CreditsPage() {
     }
   }, []);
 
+  const [fetchingLive, setFetchingLive] = useState(false);
+  async function fetchLiveBalance() {
+    setFetchingLive(true);
+    try {
+      await fetch(`${API}/api/credits/refresh`, { method: "POST" });
+      await fetchCredits();
+    } finally {
+      setFetchingLive(false);
+    }
+  }
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     fetchCredits();
@@ -83,6 +94,9 @@ export default function CreditsPage() {
           </div>
           <button onClick={fetchCredits} className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors">
             🔄 Refresh
+          </button>
+          <button onClick={fetchLiveBalance} disabled={fetchingLive} className="px-3 py-1.5 bg-blue-900 hover:bg-blue-800 disabled:bg-gray-800 text-blue-300 rounded-lg text-sm transition-colors">
+            {fetchingLive ? "Fetching…" : "⚡ Fetch Live Balance"}
           </button>
 
         </div>

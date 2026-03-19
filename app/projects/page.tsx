@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://api-production-194a.up.railway.app";
 
@@ -82,14 +83,15 @@ export default function ProjectsPage() {
             {projects.map((project) => {
               const health = HEALTH_CONFIG[project.health ?? "unknown"] ?? HEALTH_CONFIG.unknown;
               return (
-                <div
+                <Link
                   key={project.id}
-                  className={`bg-gray-900 rounded-xl border border-gray-800 border-l-4 ${health.bg} p-5 hover:border-gray-600 transition-colors`}
+                  href={`/projects/${project.id}`}
+                  className={`block bg-gray-900 rounded-xl border border-gray-800 border-l-4 ${health.bg} p-5 hover:border-gray-600 hover:bg-gray-800/70 transition-colors group`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-1">
-                        <h2 className="text-white font-semibold text-lg">{project.name}</h2>
+                        <h2 className="text-white font-semibold text-lg group-hover:text-blue-300 transition-colors">{project.name}</h2>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[project.status] ?? STATUS_BADGE.archived}`}>
                           {project.status}
                         </span>
@@ -103,6 +105,7 @@ export default function ProjectsPage() {
                             href={`https://github.com/${project.github}`}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
                             className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
                           >
                             <span>🐙</span>
@@ -113,12 +116,15 @@ export default function ProjectsPage() {
                         <span>Last active: {timeAgo(project.lastActivity)}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className={`w-3 h-3 rounded-full ${health.dot}`} />
-                      <span className="text-xs text-gray-400">{health.label}</span>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${health.dot}`} />
+                        <span className="text-xs text-gray-400">{health.label}</span>
+                      </div>
+                      <span className="text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">View tasks →</span>
                     </div>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
