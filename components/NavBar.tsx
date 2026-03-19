@@ -7,13 +7,16 @@ import { useEffect, useState } from "react";
 const API = process.env.NEXT_PUBLIC_API_URL || "https://api-production-194a.up.railway.app";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: "🌀" },
-  { href: "/office", label: "Office", icon: "🏢" },
-  { href: "/tasks", label: "Tasks", icon: "✅" },
-  { href: "/projects", label: "Projects", icon: "🚀" },
-  { href: "/ideas", label: "Ideas", icon: "💡" },
-  { href: "/credits", label: "Credits", icon: "💰" },
+  { href: "/",          label: "Dashboard", icon: "🌀" },
+  { href: "/briefing",  label: "Briefing",  icon: "📋" },
+  { href: "/office",    label: "Office",    icon: "🏢" },
+  { href: "/tasks",     label: "Tasks",     icon: "✅" },
+  { href: "/projects",  label: "Projects",  icon: "🚀" },
+  { href: "/ideas",     label: "Ideas",     icon: "💡" },
+  { href: "/credits",   label: "Credits",   icon: "💰" },
   { href: "/analytics", label: "Analytics", icon: "📊" },
+  { href: "/blockers",  label: "Blockers",  icon: "🚫" },
+  { href: "/search",    label: "Search",    icon: "🔍" },
 ];
 
 export default function NavBar() {
