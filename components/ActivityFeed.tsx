@@ -7,160 +7,169 @@ interface Activity {
   agent: string;
   action: string;
   message: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, string>;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api-production-194a.up.railway.app';
 
+const AGENT_BADGE: Record<string, string> = {
+  aeva:          'bg-blue-900 text-blue-200',
+  clara:         'bg-purple-900 text-purple-200',
+  system:        'bg-gray-700 text-gray-300',
+  antigravity:   'bg-indigo-900 text-indigo-200',
+  ui:            'bg-teal-900 text-teal-200',
+};
+
+const ACTION_ICON: Record<string, string> = {
+  task_started:     '▶️',  task_in_progress: '▶️',
+  task_completed:   '✅',  task_done:        '✅',
+  task_blocked:     '🚫',  task_created:     '🆕',
+  system_init:      '🔧',  message:          '💬',
+  collaboration:    '🤝',  decision:         '🎯',
+  error:            '❌',  deployment:       '🚀',
+  idea_captured:    '💡',
+};
+
 export default function ActivityFeed() {
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const prevLengthRef = useRef(0);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
+  const [live, setLive]             = useState(false);
+  const scrollRef    = useRef<HTMLDivElement>(null);
+  const prevLenRef   = useRef(0);
+  const eventSrcRef  = useRef<EventSource | null>(null);
 
-  const fetchActivities = async () => {
+  // --- Initial load via REST ---
+  async function fetchInitial() {
     try {
-      const response = await fetch(`${API_URL}/api/office/activity?limit=50`);
-      if (!response.ok) throw new Error('Failed to fetch activities');
-      const data = await response.json();
+      const res = await fetch(`${API_URL}/api/office/activity?limit=50`);
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data: Activity[] = await res.json();
       setActivities(data);
+      prevLenRef.current = data.length;
       setError(null);
-      
-      // Auto-scroll to bottom if new activities
-      if (data.length > prevLengthRef.current && scrollRef.current) {
-        setTimeout(() => {
-          scrollRef.current?.scrollTo({
-            top: scrollRef.current.scrollHeight,
-            behavior: 'smooth'
-          });
-        }, 100);
-      }
-      prevLengthRef.current = data.length;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchActivities();
-    const interval = setInterval(fetchActivities, 5000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
-  }, []);
-
-  const getAgentColor = (agent: string) => {
-    const colors: Record<string, string> = {
-      aeva: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
-      clara: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
-      system: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
-    };
-    return colors[agent.toLowerCase()] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300';
-  };
-
-  const getActionIcon = (action: string) => {
-    const icons: Record<string, string> = {
-      task_started: '▶️',
-      task_completed: '✅',
-      task_blocked: '🚫',
-      system_init: '🔧',
-      message: '💬',
-      collaboration: '🤝',
-      decision: '🎯',
-      error: '❌',
-    };
-    return icons[action] || '📌';
-  };
-
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
-
-  if (loading) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-          📊 Activity Feed
-        </h2>
-        <div className="flex items-center justify-center h-40">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-        </div>
-      </div>
-    );
   }
 
-  if (error) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-          📊 Activity Feed
-        </h2>
-        <div className="text-red-500 dark:text-red-400">
-          Error: {error}
-        </div>
-      </div>
-    );
+  // --- SSE upgrade (falls back to polling if SSE fails) ---
+  function connectSSE() {
+    try {
+      const es = new EventSource(`${API_URL}/api/stream/activity`);
+      eventSrcRef.current = es;
+
+      es.onopen = () => setLive(true);
+      es.onmessage = (event) => {
+        try {
+          const entry: Activity = JSON.parse(event.data);
+          setActivities(prev => {
+            const next = [...prev, entry];
+            return next.slice(-100); // keep last 100
+          });
+          // Auto-scroll
+          setTimeout(() => {
+            if (scrollRef.current) {
+              scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            }
+          }, 80);
+        } catch { /* ignore parse errors */ }
+      };
+
+      es.onerror = () => {
+        setLive(false);
+        es.close();
+        eventSrcRef.current = null;
+        // Fall back to polling
+        setTimeout(() => startPolling(), 5000);
+      };
+    } catch {
+      startPolling();
+    }
+  }
+
+  // --- Polling fallback ---
+  const pollTimer = useRef<NodeJS.Timeout | null>(null);
+  function startPolling() {
+    if (pollTimer.current) return;
+    pollTimer.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/office/activity?limit=50`);
+        if (!res.ok) return;
+        const data: Activity[] = await res.json();
+        setActivities(data);
+        if (data.length > prevLenRef.current && scrollRef.current) {
+          scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+        }
+        prevLenRef.current = data.length;
+      } catch { /* noop */ }
+    }, 8000);
+  }
+
+  useEffect(() => {
+    fetchInitial().then(() => connectSSE());
+    return () => {
+      eventSrcRef.current?.close();
+      if (pollTimer.current) clearInterval(pollTimer.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function fmt(ts: string) {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col h-[500px]">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-          📊 Activity Feed
-        </h2>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
-          {activities.length} events
+    <div className="bg-gray-900 rounded-xl border border-gray-800 flex flex-col" style={{ height: '500px' }}>
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">📡</span>
+          <span className="text-white font-semibold">Activity Feed</span>
+          <span className="text-gray-600 text-xs">{activities.length} events</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className={`w-2 h-2 rounded-full ${live ? 'bg-green-400 animate-pulse' : 'bg-gray-600'}`} />
+          <span className={`text-xs ${live ? 'text-green-400' : 'text-gray-500'}`}>
+            {live ? 'live' : 'polling'}
+          </span>
         </div>
       </div>
 
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600"
-      >
-        {activities.map((activity, index) => (
-          <div
-            key={index}
-            className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-          >
-            <div className="flex items-start gap-3">
-              <span className="text-xl flex-shrink-0">{getActionIcon(activity.action)}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${getAgentColor(activity.agent)}`}>
-                    {activity.agent}
-                  </span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {formatTimestamp(activity.timestamp)}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-700 dark:text-gray-300">
-                  {activity.message}
-                </p>
-                {activity.metadata && Object.keys(activity.metadata).length > 0 && (
-                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-x-2">
-                    {Object.entries(activity.metadata).map(([key, value]) => (
-                      <span key={key}>
-                        <span className="font-semibold">{key}:</span> {String(value)}
-                      </span>
-                    ))}
-                  </div>
-                )}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
+        {loading && (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+          </div>
+        )}
+        {error && <div className="text-red-400 text-sm text-center py-8">Error: {error}</div>}
+        {!loading && !error && activities.length === 0 && (
+          <div className="text-gray-600 text-sm text-center py-8">No activity yet</div>
+        )}
+        {activities.map((act, i) => (
+          <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-800 last:border-0 hover:bg-gray-800/50 rounded px-1 transition-colors">
+            <span className="text-lg shrink-0 w-6 text-center">{ACTION_ICON[act.action] ?? '📌'}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 ${AGENT_BADGE[act.agent?.toLowerCase()] ?? 'bg-gray-700 text-gray-300'}`}>
+                  {act.agent}
+                </span>
+                <span className="text-xs text-gray-600 shrink-0">{fmt(act.timestamp)}</span>
               </div>
+              <p className="text-gray-300 text-sm leading-snug">{act.message}</p>
+              {act.metadata && Object.keys(act.metadata).length > 0 && (
+                <div className="flex gap-3 mt-1">
+                  {Object.entries(act.metadata).slice(0, 3).map(([k, v]) => (
+                    <span key={k} className="text-xs text-gray-600">
+                      <span className="font-medium">{k}:</span> {String(v)}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
-
-        {activities.length === 0 && (
-          <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-            No activity yet
-          </div>
-        )}
       </div>
     </div>
   );
