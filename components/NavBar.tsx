@@ -66,19 +66,19 @@ export default function NavBar() {
       </div>
 
       {/* Nav links */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none">
         {NAV_ITEMS.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                 active ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
               }`}
             >
               <span>{item.icon}</span>
-              <span className="hidden sm:inline">{item.label}</span>
+              <span className="hidden lg:inline">{item.label}</span>
             </Link>
           );
         })}

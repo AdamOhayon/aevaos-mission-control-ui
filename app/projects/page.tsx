@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://api-production-194a.up.railway.app";
 
@@ -47,7 +47,12 @@ export default function ProjectsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchProjects(); }, [fetchProjects]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    fetchProjects();
+    timerRef.current = setInterval(fetchProjects, 60_000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [fetchProjects]);
 
   function timeAgo(ts?: string) {
     if (!ts) return "—";
@@ -61,9 +66,12 @@ export default function ProjectsPage() {
   return (
     <div className="min-h-screen bg-gray-950 p-6">
       <div className="max-w-5xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-white">🚀 Projects</h1>
-          <p className="text-gray-400 mt-1">Portfolio view — {projects.length} projects</p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-white">🚀 Projects</h1>
+            <p className="text-gray-400 mt-1">Portfolio view — {projects.length} projects</p>
+          </div>
+          <button onClick={fetchProjects} className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors">🔄 Refresh</button>
         </div>
 
         {loading && <div className="text-gray-400 text-center py-20">Loading…</div>}

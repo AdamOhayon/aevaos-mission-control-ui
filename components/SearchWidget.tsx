@@ -1,161 +1,107 @@
 'use client';
 
-import { useState } from 'react';
-
-interface SearchResult {
-  file: string;
-  content: string;
-  score?: number;
-  line?: number;
-}
-
-interface SearchResponse {
-  results: SearchResult[];
-  query: string;
-  collection?: string;
-}
+import { useState, useCallback, useRef, FormEvent } from 'react';
+import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api-production-194a.up.railway.app';
 
+interface SearchResult {
+  type: 'task' | 'idea' | 'project';
+  id: string;
+  title: string;
+  description?: string;
+  meta: Record<string, string | undefined>;
+  score: number;
+  href: string;
+}
+
+const TYPE_ICON: Record<string, string> = { task: '✅', idea: '💡', project: '🚀' };
+const TYPE_BADGE: Record<string, string> = {
+  task:    'bg-blue-900 text-blue-200',
+  idea:    'bg-yellow-900 text-yellow-200',
+  project: 'bg-purple-900 text-purple-200',
+};
+
 export default function SearchWidget() {
-  const [query, setQuery] = useState('');
+  const [query, setQuery]     = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searchType, setSearchType] = useState<'semantic' | 'keyword'>('semantic');
+  const [searched, setSearched] = useState(false);
+  const debounce = useRef<NodeJS.Timeout | null>(null);
 
-  const search = async () => {
-    if (!query.trim()) return;
-
+  const doSearch = useCallback(async (q: string) => {
+    if (q.trim().length < 2) { setResults([]); setSearched(false); return; }
     setLoading(true);
-    setError(null);
-
     try {
-      const endpoint = searchType === 'semantic' 
-        ? '/api/search/semantic'
-        : '/api/search/markdown';
-      
-      const res = await fetch(
-        `${API_URL}${endpoint}?q=${encodeURIComponent(query)}&limit=10`
-      );
-
-      if (!res.ok) {
-        throw new Error(`Search failed: ${res.statusText}`);
-      }
-
-      const data: SearchResponse = await res.json();
-      setResults(data.results || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed');
+      const res = await fetch(`${API_URL}/api/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setResults(data.results ?? []);
+      setSearched(true);
+    } catch {
       setResults([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      search();
-    }
-  };
+  function handleInput(val: string) {
+    setQuery(val);
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => doSearch(val), 350);
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    doSearch(query);
+  }
 
   return (
-    <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6">
-      <div className="flex flex-col gap-3">
-        {/* Search Input */}
-        <div className="flex gap-2">
+    <div className="w-full">
+      <form onSubmit={handleSubmit}>
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Search knowledge base..."
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-            disabled={loading}
+            onChange={e => handleInput(e.target.value)}
+            placeholder="Search tasks, projects, ideas…"
+            className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition-colors"
           />
-          <button
-            onClick={search}
-            disabled={loading || !query.trim()}
-            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? '...' : '🔍'}
-          </button>
+          {loading && (
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-xs animate-pulse">
+              searching…
+            </span>
+          )}
         </div>
+      </form>
 
-        {/* Search Type Toggle */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => setSearchType('semantic')}
-            className={`px-3 py-1 rounded-md text-sm transition-colors ${
-              searchType === 'semantic'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
-          >
-            🧠 Semantic
-          </button>
-          <button
-            onClick={() => setSearchType('keyword')}
-            className={`px-3 py-1 rounded-md text-sm transition-colors ${
-              searchType === 'keyword'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
-          >
-            🔤 Keyword
-          </button>
-        </div>
+      {searched && results.length === 0 && !loading && (
+        <p className="text-gray-600 text-sm mt-3 text-center">No results for "{query}"</p>
+      )}
 
-        {/* Error Message */}
-        {error && (
-          <div className="p-3 bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-700 rounded-lg text-red-800 dark:text-red-200">
-            {error}
-          </div>
-        )}
-
-        {/* Results */}
-        {results.length > 0 && (
-          <div className="mt-4 space-y-2 max-h-96 overflow-y-auto">
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-              Found {results.length} result{results.length !== 1 ? 's' : ''}
-            </div>
-            {results.map((result, i) => (
-              <div
-                key={i}
-                className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-blue-600 dark:text-blue-400 truncate">
-                      {result.file}
-                      {result.line && (
-                        <span className="text-gray-500 dark:text-gray-400 ml-2">
-                          :{result.line}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-sm text-gray-700 dark:text-gray-300 mt-1 line-clamp-3">
-                      {result.content}
-                    </div>
-                  </div>
-                  {result.score && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {(result.score * 100).toFixed(0)}%
-                    </div>
-                  )}
-                </div>
+      {results.length > 0 && (
+        <div className="mt-3 space-y-2 max-h-72 overflow-y-auto">
+          {results.slice(0, 8).map(r => (
+            <Link key={r.id} href={r.href}
+              className="flex items-start gap-3 px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-blue-600 rounded-lg transition-colors">
+              <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${TYPE_BADGE[r.type]}`}>
+                {TYPE_ICON[r.type]} {r.type}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium truncate">{r.title}</p>
+                {r.description && <p className="text-gray-500 text-xs truncate">{r.description}</p>}
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* No Results */}
-        {!loading && results.length === 0 && query && !error && (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            No results found for &quot;{query}&quot;
-          </div>
-        )}
-      </div>
+              <span className="text-gray-600 text-xs shrink-0 font-mono">{r.id}</span>
+            </Link>
+          ))}
+          {results.length > 8 && (
+            <Link href={`/search`}
+              className="block text-center text-blue-400 text-xs hover:underline py-1">
+              +{results.length - 8} more → full search
+            </Link>
+          )}
+        </div>
+      )}
     </div>
   );
 }

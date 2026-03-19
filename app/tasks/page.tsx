@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef, FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://api-production-194a.up.railway.app";
 const REFRESH_INTERVAL = 30_000;
@@ -26,8 +27,16 @@ interface Task {
 interface Alert { id: string; level: "warning" | "critical"; type: string; title: string; message: string; taskId?: string; }
 
 // ---- Task Detail Panel ----
-function TaskDetail({ task, onClose, onStatusChange }: { task: Task; onClose: () => void; onStatusChange: (id: string, status: string) => void; }) {
+function TaskDetail({ task, onClose, onStatusChange, onDelete }: {
+  task: Task;
+  onClose: () => void;
+  onStatusChange: (id: string, status: string) => void;
+  onDelete: (id: string) => void;
+}) {
   const [updating, setUpdating] = useState(false);
+  const [note, setNote]         = useState("");
+  const [addingNote, setAdding] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function changeStatus(newStatus: string) {
     setUpdating(true);
@@ -38,6 +47,26 @@ function TaskDetail({ task, onClose, onStatusChange }: { task: Task; onClose: ()
     });
     onStatusChange(task.id, newStatus);
     setUpdating(false);
+  }
+
+  async function addNote() {
+    if (!note.trim()) return;
+    setAdding(true);
+    await fetch(`${API}/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    });
+    setNote("");
+    setAdding(false);
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Delete "${task.title}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    await fetch(`${API}/api/tasks/${task.id}`, { method: "DELETE" });
+    onDelete(task.id);
+    onClose();
   }
 
   return (
@@ -51,7 +80,13 @@ function TaskDetail({ task, onClose, onStatusChange }: { task: Task; onClose: ()
             <span className="text-gray-500 text-xs font-mono">{task.id}</span>
             <h2 className="text-white font-bold text-lg">{task.title}</h2>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white text-xl transition-colors">✕</button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleDelete} disabled={deleting}
+              className="text-red-500 hover:text-red-400 text-xs px-2 py-1 rounded hover:bg-red-950 transition-colors">
+              {deleting ? "Deleting…" : "🗑 Delete"}
+            </button>
+            <button onClick={onClose} className="text-gray-500 hover:text-white text-xl transition-colors">✕</button>
+          </div>
         </div>
 
         <div className="p-5 space-y-5 flex-1">
@@ -103,6 +138,20 @@ function TaskDetail({ task, onClose, onStatusChange }: { task: Task; onClose: ()
               <p className="text-gray-300 text-sm leading-relaxed">{task.description}</p>
             </div>
           )}
+
+          {/* Add note */}
+          <div>
+            <p className="text-gray-400 text-xs uppercase tracking-wide mb-2">Add Note</p>
+            <div className="flex gap-2">
+              <input type="text" value={note} onChange={e => setNote(e.target.value)}
+                placeholder="Type a note…"
+                className="flex-1 bg-gray-800 text-white border border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+              <button onClick={addNote} disabled={addingNote || !note.trim()}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white rounded-lg text-sm transition-colors">
+                {addingNote ? "…" : "Add"}
+              </button>
+            </div>
+          </div>
 
           {/* Activity log */}
           {task.activity_log && task.activity_log.length > 0 && (
@@ -205,6 +254,19 @@ export default function TasksPage() {
   function openDetail(task: Task) {
     setSelected(task);
   }
+
+  const searchParams = useSearchParams();
+
+  // Auto-open form when navigated from Idea→Task conversion
+  useEffect(() => {
+    const t = searchParams.get("title");
+    const d = searchParams.get("description");
+    if (t) {
+      setNewTitle(t);
+      setNewDesc(d ?? "");
+      setShowForm(true);
+    }
+  }, [searchParams]);
 
   const filtered = filterStatus ? tasks.filter(t => t.status === filterStatus) : tasks;
   const tasksByStatus = (status: string) => filtered.filter(t => t.status === status);
@@ -343,6 +405,9 @@ export default function TasksPage() {
           onStatusChange={(id, status) => {
             setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
             setSelected(prev => prev ? { ...prev, status } : prev);
+          }}
+          onDelete={(id) => {
+            setTasks(prev => prev.filter(t => t.id !== id));
           }}
         />
       )}

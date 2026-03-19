@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 
 interface Agent {
   id: string;
@@ -24,152 +25,116 @@ interface AgentsData {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api-production-194a.up.railway.app';
 
+const STATUS_DOT: Record<string, string> = {
+  active: 'bg-green-400 animate-pulse',
+  busy:   'bg-yellow-400 animate-pulse',
+  idle:   'bg-gray-500',
+};
+const STATUS_TEXT: Record<string, string> = {
+  active: 'text-green-400',
+  busy:   'text-yellow-400',
+  idle:   'text-gray-400',
+};
+const STATUS_BORDER: Record<string, string> = {
+  active: 'border-l-green-500',
+  busy:   'border-l-yellow-500',
+  idle:   'border-l-gray-600',
+};
+
 export default function AgentStatus() {
   const [agents, setAgents] = useState<AgentsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAgents = async () => {
+  const fetchAgents = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/api/office/agents`);
       if (!response.ok) throw new Error('Failed to fetch agents');
-      const data = await response.json();
-      setAgents(data);
+      setAgents(await response.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchAgents();
-    const interval = setInterval(fetchAgents, 10000); // Refresh every 10 seconds
+    const interval = setInterval(fetchAgents, 15_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchAgents]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'text-green-500';
-      case 'idle':
-        return 'text-yellow-500';
-      case 'busy':
-        return 'text-red-500';
-      default:
-        return 'text-gray-500';
-    }
-  };
-
-  const getStatusIndicator = (status: string) => {
-    switch (status) {
-      case 'active':
-        return '🟢';
-      case 'idle':
-        return '🟡';
-      case 'busy':
-        return '🔴';
-      default:
-        return '⚪';
-    }
-  };
-
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  };
-
-  if (loading) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-          👥 Agent Status
-        </h2>
-        <div className="flex items-center justify-center h-40">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-          👥 Agent Status
-        </h2>
-        <div className="text-red-500 dark:text-red-400">
-          Error: {error}
-        </div>
-      </div>
-    );
+  function timeAgo(ts: string) {
+    const diff = Date.now() - new Date(ts).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-          👥 Agent Status
-        </h2>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
-          {agents?.metadata.activeAgents} active / {agents?.metadata.totalAgents} total
-        </div>
+        <h2 className="text-white font-semibold text-lg">👥 Agent Status</h2>
+        {agents && (
+          <span className="text-gray-400 text-sm">
+            {agents.metadata.activeAgents} active / {agents.metadata.totalAgents} total
+          </span>
+        )}
       </div>
 
-      <div className="space-y-4">
-        {agents && Object.values(agents.agents).map((agent) => (
-          <div
-            key={agent.id}
-            className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border-l-4 border-blue-500"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{agent.emoji}</span>
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white">
-                    {agent.name}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {agent.role}
-                  </p>
+      {loading && (
+        <div className="flex items-center justify-center h-32">
+          <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-500" />
+        </div>
+      )}
+
+      {error && <div className="text-red-400 text-sm py-4">Error: {error}</div>}
+
+      {!loading && !error && agents && (
+        <div className="space-y-3">
+          {Object.values(agents.agents).map((agent) => (
+            <Link key={agent.id} href={`/agents/${agent.id}`}
+              className={`block p-4 bg-gray-800 rounded-lg border-l-4 ${STATUS_BORDER[agent.status] ?? 'border-l-gray-600'} hover:bg-gray-750 transition-colors`}>
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{agent.emoji}</span>
+                  <div>
+                    <h3 className="text-white font-semibold">{agent.name}</h3>
+                    <p className="text-gray-500 text-xs">{agent.role}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-2.5 h-2.5 rounded-full ${STATUS_DOT[agent.status] ?? 'bg-gray-600'}`} />
+                  <span className={`text-xs font-medium capitalize ${STATUS_TEXT[agent.status] ?? 'text-gray-400'}`}>
+                    {agent.status}
+                  </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-sm font-semibold ${getStatusColor(agent.status)}`}>
-                  {getStatusIndicator(agent.status)} {agent.status}
-                </span>
-              </div>
-            </div>
 
-            {agent.currentTask && (
-              <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
-                <span className="font-semibold text-blue-700 dark:text-blue-400">
-                  Current task:
-                </span>{' '}
-                <span className="text-gray-700 dark:text-gray-300">
-                  {agent.currentTask}
-                </span>
-              </div>
-            )}
+              {agent.currentTask && (
+                <div className="bg-gray-700 rounded px-2 py-1.5 text-sm">
+                  <span className="text-blue-400 font-medium text-xs">Current: </span>
+                  <span className="text-gray-200 text-xs">{agent.currentTask}</span>
+                </div>
+              )}
 
-            {agent.lastActivity && (
-              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Last activity: {agent.lastActivity} • {formatTimestamp(agent.lastSeen)}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+              {agent.lastActivity && (
+                <p className="text-gray-600 text-xs mt-2 truncate">
+                  {agent.lastActivity} · {timeAgo(agent.lastSeen)}
+                </p>
+              )}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {!loading && !error && agents && Object.keys(agents.agents).length === 0 && (
+        <p className="text-gray-600 text-sm text-center py-6">No agents registered</p>
+      )}
     </div>
   );
 }

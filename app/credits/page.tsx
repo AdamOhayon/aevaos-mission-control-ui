@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://api-production-194a.up.railway.app";
 
@@ -48,6 +48,7 @@ export default function CreditsPage() {
       const res = await fetch(`${API}/api/credits`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setCredits(await res.json());
+      setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -55,7 +56,12 @@ export default function CreditsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchCredits(); }, [fetchCredits]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    fetchCredits();
+    timerRef.current = setInterval(fetchCredits, 5 * 60_000); // 5-minute auto-refresh
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [fetchCredits]);
 
   function barColor(pct: number) {
     if (pct >= 90) return "bg-red-500";
@@ -78,6 +84,7 @@ export default function CreditsPage() {
           <button onClick={fetchCredits} className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors">
             🔄 Refresh
           </button>
+
         </div>
 
         {loading && <div className="text-gray-400 text-center py-20">Loading…</div>}

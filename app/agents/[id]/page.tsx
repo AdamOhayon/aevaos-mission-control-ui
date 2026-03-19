@@ -146,6 +146,18 @@ export default function AgentProfilePage() {
               <p className="text-gray-200 text-sm">{agent.currentTask}</p>
             </div>
           )}
+
+          {/* Capabilities */}
+          {(agent as any).capabilities?.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs text-gray-500 mb-2">Capabilities</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(agent as any).capabilities.map((cap: string) => (
+                  <span key={cap} className="text-xs px-2 py-0.5 bg-gray-800 text-gray-300 border border-gray-700 rounded-full">{cap.replace(/-/g, ' ')}</span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Metrics row */}

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://api-production-194a.up.railway.app";
 
@@ -29,14 +30,18 @@ interface Idea {
 }
 
 export default function IdeasPage() {
-  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const router = useRouter();
+  const [ideas, setIdeas]               = useState<Idea[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
-  const [category, setCategory] = useState("research");
-  const [submitting, setSubmitting] = useState(false);
+  const [showForm, setShowForm]       = useState(false);
+  const [title, setTitle]             = useState("");
+  const [desc, setDesc]               = useState("");
+  const [category, setCategory]       = useState("research");
+  const [submitting, setSubmitting]   = useState(false);
+  const [filterCat, setFilterCat]     = useState("");
+  const [filterStatus, setFilterSt]   = useState("");
+  const [sortOrder, setSortOrder]     = useState<"newest"|"oldest">("newest");
 
   const fetchIdeas = useCallback(async () => {
     try {
@@ -81,6 +86,15 @@ export default function IdeasPage() {
     return `${days}d ago`;
   }
 
+  const displayed = ideas
+    .filter(i => !filterCat    || i.category === filterCat)
+    .filter(i => !filterStatus || i.status   === filterStatus)
+    .sort((a, b) => {
+      const ta = new Date(a.capturedAt ?? 0).getTime();
+      const tb = new Date(b.capturedAt ?? 0).getTime();
+      return sortOrder === "newest" ? tb - ta : ta - tb;
+    });
+
   return (
     <div className="min-h-screen bg-gray-950 p-6">
       <div className="max-w-4xl mx-auto">
@@ -89,12 +103,29 @@ export default function IdeasPage() {
             <h1 className="text-3xl font-bold text-white">💡 Ideas</h1>
             <p className="text-gray-400 mt-1">{ideas.length} captured ideas</p>
           </div>
-          <button
-            onClick={() => setShowForm((v) => !v)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            + Capture Idea
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
+              className="bg-gray-800 text-gray-300 border border-gray-700 rounded-lg px-2 py-1.5 text-sm focus:outline-none">
+              <option value="">All categories</option>
+              {["vision","project","research","feature"].map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={filterStatus} onChange={e => setFilterSt(e.target.value)}
+              className="bg-gray-800 text-gray-300 border border-gray-700 rounded-lg px-2 py-1.5 text-sm focus:outline-none">
+              <option value="">All statuses</option>
+              {["new","in-progress","documented"].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select value={sortOrder} onChange={e => setSortOrder(e.target.value as "newest"|"oldest")}
+              className="bg-gray-800 text-gray-300 border border-gray-700 rounded-lg px-2 py-1.5 text-sm focus:outline-none">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+            <button
+              onClick={() => setShowForm((v) => !v)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              + Capture Idea
+            </button>
+          </div>
         </div>
 
         {/* Capture form */}
@@ -145,7 +176,10 @@ export default function IdeasPage() {
 
         {!loading && !error && (
           <div className="space-y-3">
-            {ideas.map((idea) => (
+            {displayed.length === 0 && ideas.length > 0 && (
+              <div className="text-center text-gray-600 py-8">No ideas match the current filters.</div>
+            )}
+            {displayed.map((idea) => (
               <div key={idea.id} className="bg-gray-900 rounded-xl border border-gray-800 p-5 hover:border-gray-600 transition-colors">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
@@ -173,13 +207,18 @@ export default function IdeasPage() {
                       </div>
                     )}
                   </div>
-                  <div className="text-right text-xs text-gray-500 shrink-0">
+                  <div className="text-right text-xs text-gray-500 shrink-0 space-y-1">
                     <div>{idea.id}</div>
                     <div>{timeAgo(idea.capturedAt)}</div>
                     {idea.notionUrl && (
                       <a href={idea.notionUrl} target="_blank" rel="noopener noreferrer"
-                        className="text-blue-400 hover:text-blue-300 mt-1 inline-block">Notion ↗</a>
+                        className="text-blue-400 hover:text-blue-300 inline-block">Notion ↗</a>
                     )}
+                    <button
+                      onClick={() => router.push(`/tasks?title=${encodeURIComponent(idea.title)}&description=${encodeURIComponent(idea.description ?? "")}`)}
+                      className="block text-xs text-green-400 hover:text-green-300 hover:underline transition-colors">
+                      → Create Task
+                    </button>
                   </div>
                 </div>
               </div>
