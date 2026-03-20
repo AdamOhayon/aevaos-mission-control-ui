@@ -45,8 +45,11 @@ export default function NavBar() {
   }, []);
 
   function handleLogout() {
-    localStorage.removeItem("aevaos_session");
-    router.replace("/login");
+    localStorage.removeItem('aevaos_token');
+    localStorage.removeItem('aevaos_session');
+    // Clear cookie so Next.js middleware redirects to /login
+    document.cookie = 'aevaos_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    router.replace('/login');
   }
 
   function getSession() {
