@@ -9,10 +9,14 @@ interface Agent {
   emoji?: string;
   role?: string;
   status: string;
+  preferred_model?: string;
+  fallback_model?: string;
   currentTask?: string | null;
   lastActivity?: string;
   lastSeen?: string;
-  metrics?: { tasksCompleted?: number; tokenUsage?: number; costTotal?: number };
+  capabilities?: string[];
+  task_types?: string[];
+  metrics?: { tasksCompleted?: number; dispatches_sent?: number; tokenUsage?: number; costTotal?: number };
 }
 
 interface AgentRegistry {
@@ -20,21 +24,31 @@ interface AgentRegistry {
   metadata?: { totalAgents: number; activeAgents: number };
 }
 
-const STATUS_RING: Record<string, string> = {
-  active: "ring-2 ring-green-400",
-  busy:   "ring-2 ring-yellow-400",
-  idle:   "ring-1 ring-gray-600",
+const AGENT_COLORS: Record<string, { ring: string; glow: string; accent: string; bg: string }> = {
+  aeva:  { ring: '#8b5cf6', glow: 'rgba(139,92,246,0.15)', accent: 'text-purple-400', bg: 'bg-purple-500/10' },
+  clara: { ring: '#3b82f6', glow: 'rgba(59,130,246,0.15)',  accent: 'text-blue-400',   bg: 'bg-blue-500/10' },
+  pixel: { ring: '#ec4899', glow: 'rgba(236,72,153,0.15)',  accent: 'text-pink-400',   bg: 'bg-pink-500/10' },
+  sage:  { ring: '#10b981', glow: 'rgba(16,185,129,0.15)',  accent: 'text-emerald-400', bg: 'bg-emerald-500/10' },
 };
-const STATUS_DOT: Record<string, string> = {
-  active: "bg-green-400 animate-pulse",
-  busy:   "bg-yellow-400 animate-pulse",
-  idle:   "bg-gray-500",
+
+const MODEL_LOGOS: Record<string, string> = {
+  'openai': '⬡',
+  'anthropic': '◈',
+  'google': '◉',
 };
-const STATUS_LABEL: Record<string, string> = {
-  active: "text-green-400",
-  busy:   "text-yellow-400",
-  idle:   "text-gray-400",
-};
+
+function getModelLogo(model?: string) {
+  if (!model) return '🤖';
+  if (model.includes('openai') || model.includes('o3') || model.includes('o4')) return MODEL_LOGOS.openai;
+  if (model.includes('anthropic') || model.includes('claude')) return MODEL_LOGOS.anthropic;
+  if (model.includes('google') || model.includes('gemini')) return MODEL_LOGOS.google;
+  return '🤖';
+}
+
+function getModelShort(model?: string) {
+  if (!model) return '';
+  return model.split('/').pop()?.replace('-preview', '') ?? model;
+}
 
 export default function AgentsPage() {
   const [registry, setRegistry] = useState<AgentRegistry | null>(null);
@@ -60,83 +74,112 @@ export default function AgentsPage() {
   const activeCount = agents.filter(([, a]) => a.status === "active" || a.status === "busy").length;
 
   return (
-    <div className="min-h-screen bg-gray-950 p-6">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+    <div className="min-h-screen bg-[var(--aeva-bg)] pt-16 grid-bg">
+      <div className="max-w-5xl mx-auto px-6 py-8 relative z-10">
+        <div className="flex items-center justify-between mb-8 animate-in">
           <div>
-            <h1 className="text-3xl font-bold text-white">🤖 Agents</h1>
-            <p className="text-gray-400 mt-1 text-sm">
-              {agents.length} registered · {activeCount} active · auto-refreshes every 15s
+            <h1 className="text-3xl font-bold text-white">🤖 Agent Mesh</h1>
+            <p className="text-[var(--aeva-text-dim)] mt-1 text-sm">
+              {agents.length} registered · <span className="text-green-400">{activeCount} online</span> · auto-refreshes
             </p>
           </div>
-          <button onClick={() => fetchAgents(true)} className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors">🔄</button>
+          <button onClick={() => fetchAgents(true)} className="px-3 py-1.5 glass rounded-lg text-[var(--aeva-text-dim)] hover:text-white text-sm transition-colors hover:bg-white/[0.04]">🔄</button>
         </div>
 
-        {loading && <div className="text-gray-400 text-center py-20">Loading agents…</div>}
-
-        {!loading && agents.length === 0 && (
-          <div className="text-center py-20 text-gray-600">
-            <p className="text-5xl mb-4">🤖</p>
-            <p>No agents registered yet</p>
-            <p className="text-sm mt-1">Agents register via <code className="text-blue-400">PATCH /api/office/agents/:id</code></p>
-          </div>
-        )}
+        {loading && <div className="text-[var(--aeva-text-dim)] text-center py-20">Loading agents…</div>}
 
         {!loading && agents.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {agents.map(([id, agent]) => (
-              <Link key={id} href={`/agents/${id}`}
-                className={`bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-blue-600 transition-all group ${STATUS_RING[agent.status] ?? "ring-1 ring-gray-700"}`}>
-                {/* Top row */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-4xl">{agent.emoji ?? "🤖"}</span>
-                    <div>
-                      <h2 className="text-white font-bold text-lg group-hover:text-blue-300 transition-colors">{agent.name}</h2>
-                      {agent.role && <p className="text-gray-500 text-xs">{agent.role}</p>}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {agents.map(([id, agent], idx) => {
+              const colors = AGENT_COLORS[id] ?? AGENT_COLORS.aeva;
+              const isActive = agent.status === 'active' || agent.status === 'busy';
+              return (
+                <Link key={id} href={`/agents/${id}`}
+                  className={`card-glow p-6 group animate-in`}
+                  style={{ animationDelay: `${idx * 0.1}s` }}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      {/* Avatar with glow ring */}
+                      <div className="relative">
+                        <div
+                          className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl transition-all duration-300 group-hover:scale-110"
+                          style={{
+                            background: `${colors.ring}12`,
+                            border: `1px solid ${colors.ring}40`,
+                            boxShadow: isActive ? `0 0 20px ${colors.glow}, inset 0 0 20px ${colors.glow}` : 'none',
+                          }}
+                        >
+                          {agent.emoji ?? '🤖'}
+                        </div>
+                        {isActive && (
+                          <span
+                            className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-[var(--aeva-surface)]"
+                            style={{ background: '#10b981', boxShadow: '0 0 8px #10b981' }}
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <h2 className="text-white font-bold text-lg group-hover:text-blue-300 transition-colors">{agent.name}</h2>
+                        {agent.role && <p className="text-[var(--aeva-text-dim)] text-xs mt-0.5 max-w-[200px] truncate">{agent.role}</p>}
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: `${colors.ring}10` }}>
+                      <span className={`w-2 h-2 rounded-full ${isActive ? 'animate-pulse' : ''}`}
+                        style={{ background: isActive ? '#10b981' : '#3a3a6e' }} />
+                      <span className={`text-[10px] font-medium capitalize ${isActive ? 'text-green-400' : 'text-[var(--aeva-text-muted)]'}`}>
+                        {agent.status}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-2.5 h-2.5 rounded-full ${STATUS_DOT[agent.status] ?? "bg-gray-600"}`} />
-                    <span className={`text-xs font-medium capitalize ${STATUS_LABEL[agent.status] ?? "text-gray-400"}`}>
-                      {agent.status}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Current task */}
-                {agent.currentTask ? (
-                  <div className="bg-gray-800 rounded-lg px-3 py-2 mb-3">
-                    <p className="text-xs text-gray-500 mb-0.5">Current task</p>
-                    <p className="text-gray-200 text-sm truncate">{agent.currentTask}</p>
-                  </div>
-                ) : (
-                  <div className="bg-gray-800 rounded-lg px-3 py-2 mb-3 text-gray-600 text-sm">No active task</div>
-                )}
+                  {/* Model badge */}
+                  {agent.preferred_model && (
+                    <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-[var(--aeva-surface-2)] border border-[var(--aeva-border)]">
+                      <span className="text-sm" style={{ color: colors.ring }}>{getModelLogo(agent.preferred_model)}</span>
+                      <span className="text-[var(--aeva-text)] text-xs font-mono">{getModelShort(agent.preferred_model)}</span>
+                      {agent.fallback_model && (
+                        <span className="text-[var(--aeva-text-muted)] text-[10px] ml-auto">fallback: {getModelShort(agent.fallback_model)}</span>
+                      )}
+                    </div>
+                  )}
 
-                {/* Metrics */}
-                {agent.metrics && (
-                  <div className="flex gap-4 text-xs text-gray-500">
-                    {agent.metrics.tasksCompleted != null && (
-                      <span className="flex items-center gap-1">✅ <span className="text-gray-300">{agent.metrics.tasksCompleted}</span></span>
+                  {/* Capabilities */}
+                  {agent.task_types && agent.task_types.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {agent.task_types.slice(0, 5).map(cap => (
+                        <span key={cap} className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--aeva-surface-2)] text-[var(--aeva-text-dim)] border border-[var(--aeva-border)]">
+                          {cap}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Current task */}
+                  {agent.currentTask ? (
+                    <div className="bg-[var(--aeva-surface-2)] rounded-lg px-3 py-2 mb-3 border border-[var(--aeva-border)]">
+                      <p className="text-[10px] text-[var(--aeva-text-muted)] mb-0.5 uppercase tracking-wider">Active</p>
+                      <p className="text-[var(--aeva-text)] text-sm truncate">{agent.currentTask}</p>
+                    </div>
+                  ) : (
+                    <div className="bg-[var(--aeva-surface-2)] rounded-lg px-3 py-2 mb-3 text-[var(--aeva-text-muted)] text-xs border border-[var(--aeva-border)]">
+                      Idle — awaiting dispatch
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between">
+                    {agent.lastActivity && (
+                      <p className="text-[var(--aeva-text-muted)] text-[10px] truncate max-w-[70%]">{agent.lastActivity}</p>
                     )}
-                    {agent.metrics.tokenUsage != null && (
-                      <span className="flex items-center gap-1">🧠 <span className="text-gray-300">{(agent.metrics.tokenUsage / 1000).toFixed(0)}K</span></span>
-                    )}
-                    {agent.metrics.costTotal != null && (
-                      <span className="flex items-center gap-1">💰 <span className="text-gray-300">${agent.metrics.costTotal.toFixed(2)}</span></span>
-                    )}
+                    <span className={`text-xs ${colors.accent} group-hover:translate-x-1 transition-transform duration-200`}>View →</span>
                   </div>
-                )}
-
-                {/* Last activity */}
-                {agent.lastActivity && (
-                  <p className="text-gray-600 text-xs mt-2 truncate">{agent.lastActivity}</p>
-                )}
-
-                <div className="mt-3 text-blue-500 text-xs group-hover:text-blue-400 transition-colors">View profile →</div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>

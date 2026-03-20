@@ -1,294 +1,264 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef, FormEvent } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'https://api-production-194a.up.railway.app';
 
-const AGENT_META: Record<string, { emoji: string; color: string; bg: string }> = {
-  aeva:     { emoji: '🌀', color: 'text-purple-400',  bg: 'bg-purple-950 border-purple-800' },
-  clara:    { emoji: '👩‍💻', color: 'text-blue-400',    bg: 'bg-blue-950 border-blue-800' },
-  pixel:    { emoji: '🎨', color: 'text-pink-400',    bg: 'bg-pink-950 border-pink-800' },
-  sage:     { emoji: '🔍', color: 'text-green-400',   bg: 'bg-green-950 border-green-800' },
-  default:  { emoji: '🤖', color: 'text-gray-400',    bg: 'bg-gray-900 border-gray-700' },
-};
+interface Classification { task_type: string; complexity: number; confidence: number; signals: string[]; }
+interface DispatchResult { dispatch_id: string; agent: string; model: string; classification: Classification; response: string; status: string; latency_ms: number; thread_id: string; }
+interface HistoryItem { dispatch_id?: string; agent: string; input_message: string; status: string; timestamp?: string; classification?: { type?: string; task_type?: string }; }
 
-const TYPE_BADGE: Record<string, string> = {
-  coding:       'bg-blue-900 text-blue-300',
-  design:       'bg-pink-900 text-pink-300',
-  research:     'bg-green-900 text-green-300',
-  coordination: 'bg-yellow-900 text-yellow-300',
-  general:      'bg-gray-800 text-gray-400',
+const AGENT_META: Record<string, { emoji: string; color: string; label: string }> = {
+  aeva:  { emoji: '🌀', color: '#8b5cf6', label: 'Aeva' },
+  clara: { emoji: '👩‍💻', color: '#3b82f6', label: 'Clara' },
+  pixel: { emoji: '🎨', color: '#ec4899', label: 'Pixel' },
+  sage:  { emoji: '🔍', color: '#10b981', label: 'Sage' },
 };
-const COMPLEXITY_BADGE: Record<string, string> = {
-  low:    'bg-green-900 text-green-300',
-  medium: 'bg-yellow-900 text-yellow-300',
-  high:   'bg-red-900 text-red-300',
-};
-
-interface Classification {
-  type: string;
-  complexity: string;
-  confidence: number;
-  signals?: string[];
-}
-interface Dispatch {
-  id?: string;
-  dispatch_id?: string;
-  thread_id?: string;
-  timestamp?: string;
-  input_message: string;
-  classification?: Classification;
-  agent: string;
-  model: string;
-  response: string;
-  latency_ms?: number;
-  status: string;
-  error?: string;
-  feedback?: { rating: number | null; note: string | null } | null;
-}
 
 export default function DispatchPage() {
-  const [message, setMessage]         = useState('');
-  const [context, setContext]         = useState('');
-  const [threadId, setThreadId]       = useState('');
-  const [dispatching, setDispatching] = useState(false);
-  const [result, setResult]           = useState<Dispatch | null>(null);
-  const [history, setHistory]         = useState<Dispatch[]>([]);
-  const [historyLoading, setHL]       = useState(true);
-  const [feedbackId, setFeedbackId]   = useState('');
-  const [feedbackRating, setRating]   = useState(5);
-  const [feedbackNote, setFNNote]     = useState('');
-  const [feedbackDone, setFDone]      = useState(false);
+  const [message, setMessage]     = useState('');
+  const [context, setContext]     = useState('');
+  const [sending, setSending]     = useState(false);
+  const [result, setResult]       = useState<DispatchResult | null>(null);
+  const [history, setHistory]     = useState<HistoryItem[]>([]);
+  const [rating, setRating]       = useState(0);
+  const [ratingNote, setRatingNote] = useState('');
+  const [ratingSent, setRatingSent] = useState(false);
+  const [showCtx, setShowCtx]     = useState(false);
+  const [typedResponse, setTypedResponse] = useState('');
+  const responseRef = useRef<HTMLDivElement>(null);
 
-  const fetchHistory = useCallback(async () => {
+  // Typewriter effect for response
+  useEffect(() => {
+    if (!result?.response) { setTypedResponse(''); return; }
+    setTypedResponse('');
+    let i = 0;
+    const text = result.response;
+    const interval = setInterval(() => {
+      i++;
+      setTypedResponse(text.slice(0, i));
+      if (i >= text.length) clearInterval(interval);
+    }, 8);
+    return () => clearInterval(interval);
+  }, [result?.response]);
+
+  // Auto-scroll response
+  useEffect(() => {
+    if (responseRef.current) responseRef.current.scrollTop = responseRef.current.scrollHeight;
+  }, [typedResponse]);
+
+  // Fetch history
+  async function fetchHistory() {
     try {
-      const res = await fetch(`${API}/api/agents/dispatch/history?limit=30`);
+      const res = await fetch(`${API}/api/agents/dispatch/history?limit=10`);
       const data = await res.json();
       setHistory(data.dispatches ?? []);
-    } catch { /* silent */ } finally {
-      setHL(false);
-    }
-  }, []);
+    } catch { /* silent */ }
+  }
+  useEffect(() => { fetchHistory(); }, []);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  useEffect(() => {
-    fetchHistory();
-    timerRef.current = setInterval(fetchHistory, 30_000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [fetchHistory]);
-
-  async function handleDispatch(e: React.FormEvent) {
+  async function handleDispatch(e: FormEvent) {
     e.preventDefault();
     if (!message.trim()) return;
-    setDispatching(true);
+    setSending(true);
     setResult(null);
+    setRating(0);
+    setRatingSent(false);
+    setRatingNote('');
     try {
-      const body: Record<string, unknown> = { message };
-      if (context.trim()) {
-        try { body.context = JSON.parse(context); }
-        catch { body.context = { custom: context }; }
-      }
-      if (threadId.trim()) body.thread_id = threadId;
-
+      let ctx = {};
+      if (context.trim()) try { ctx = JSON.parse(context); } catch { ctx = { raw: context }; }
       const res = await fetch(`${API}/api/agents/dispatch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ message, context: ctx }),
       });
       const data = await res.json();
       setResult(data);
-      setFeedbackId(data.dispatch_id ?? data.id ?? '');
-      setFDone(false);
       fetchHistory();
-    } finally {
-      setDispatching(false);
-    }
+    } catch { /* silent */ }
+    finally { setSending(false); }
   }
 
-  async function submitFeedback() {
-    if (!feedbackId) return;
-    await fetch(`${API}/api/agents/feedback`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dispatch_id: feedbackId, rating: feedbackRating, note: feedbackNote }),
-    });
-    setFDone(true);
+  async function sendRating() {
+    if (!result?.dispatch_id || rating < 1) return;
+    try {
+      await fetch(`${API}/api/agents/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dispatch_id: result.dispatch_id, rating, note: ratingNote }),
+      });
+      setRatingSent(true);
+    } catch { /* silent */ }
   }
 
-  const agentStyle = (agent: string) => AGENT_META[agent] ?? AGENT_META.default;
+  const agentInfo = result ? AGENT_META[result.agent] ?? AGENT_META.aeva : null;
 
   return (
-    <div className="min-h-screen bg-gray-950 p-6">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-[var(--aeva-bg)] pt-16 grid-bg">
+      <div className="max-w-6xl mx-auto px-6 py-8 relative z-10">
 
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-white">⚡ Dispatch Console</h1>
-          <p className="text-gray-400 mt-1 text-sm">
-            Send a message — the triage engine classifies it, picks the best agent + model, and runs it.
-          </p>
+        <div className="mb-8 animate-in">
+          <div className="flex items-center gap-3 mb-1">
+            <span className="text-3xl">⚡</span>
+            <h1 className="text-3xl font-bold text-white">Dispatch Terminal</h1>
+          </div>
+          <p className="text-[var(--aeva-text-dim)] text-sm ml-12">Route tasks to specialized agents · Aeva handles triage automatically</p>
         </div>
 
-        {/* Agent mesh overview */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {Object.entries(AGENT_META).filter(([k]) => k !== 'default').map(([id, meta]) => (
-            <div key={id} className={`${meta.bg} border rounded-xl p-3 text-center`}>
-              <div className="text-2xl mb-1">{meta.emoji}</div>
-              <div className={`text-sm font-medium capitalize ${meta.color}`}>{id}</div>
-            </div>
-          ))}
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main dispatch area */}
+          <div className="lg:col-span-2 space-y-4">
 
-        {/* Dispatch form */}
-        <form onSubmit={handleDispatch} className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6 space-y-4">
-          <div>
-            <label className="text-gray-400 text-xs uppercase tracking-wide block mb-1.5">Message</label>
-            <textarea
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              rows={4}
-              placeholder="Describe the task… e.g. 'Fix the bug in the credits refresh', 'Design the dashboard header', 'Research MCP protocol vs ACP'"
-              className="w-full bg-gray-800 text-white border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-gray-400 text-xs uppercase tracking-wide block mb-1.5">Context (optional JSON or plain text)</label>
-              <textarea
-                value={context}
-                onChange={e => setContext(e.target.value)}
-                rows={2}
-                placeholder={`{"project": "aevaos-api", "relevant_files": ["app.py"]}`}
-                className="w-full bg-gray-800 text-white border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none font-mono"
-              />
-            </div>
-            <div>
-              <label className="text-gray-400 text-xs uppercase tracking-wide block mb-1.5">Thread ID (optional, for continuity)</label>
-              <input
-                type="text"
-                value={threadId}
-                onChange={e => setThreadId(e.target.value)}
-                placeholder="Leave blank to start new thread"
-                className="w-full bg-gray-800 text-white border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-          </div>
-          <button
-            type="submit"
-            disabled={dispatching || !message.trim()}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-          >
-            {dispatching ? (
-              <><span className="animate-spin">⟳</span> Dispatching…</>
-            ) : (
-              '⚡ Dispatch'
-            )}
-          </button>
-        </form>
-
-        {/* Result */}
-        {result && (
-          <div className={`${agentStyle(result.agent).bg} border rounded-xl p-5 mb-6`}>
-            <div className="flex items-start gap-3 mb-4">
-              <span className="text-3xl">{agentStyle(result.agent).emoji}</span>
-              <div>
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <span className={`font-bold text-lg capitalize ${agentStyle(result.agent).color}`}>{result.agent}</span>
-                  <span className="text-gray-500 text-xs">via {result.model}</span>
-                  {result.latency_ms && <span className="text-gray-600 text-xs">{result.latency_ms}ms</span>}
-                  {result.status === 'dry_run' && <span className="text-yellow-400 text-xs bg-yellow-950 px-2 py-0.5 rounded">DRY RUN</span>}
-                  {result.status === 'error' && <span className="text-red-400 text-xs bg-red-950 px-2 py-0.5 rounded">ERROR</span>}
-                </div>
-                {result.classification && (
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_BADGE[result.classification.type] ?? 'bg-gray-800 text-gray-400'}`}>
-                      {result.classification.type}
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${COMPLEXITY_BADGE[result.classification.complexity] ?? 'bg-gray-800 text-gray-400'}`}>
-                      {result.classification.complexity} complexity
-                    </span>
-                    <span className="text-xs text-gray-600">{Math.round((result.classification.confidence ?? 0) * 100)}% confidence</span>
-                    {result.classification.signals?.length ? (
-                      <span className="text-xs text-gray-700">signals: {result.classification.signals.slice(0, 4).join(', ')}</span>
-                    ) : null}
-                  </div>
-                )}
+            {/* Input form — terminal style */}
+            <div className="card-glow overflow-hidden animate-in animate-in-delay-1">
+              {/* Terminal header */}
+              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--aeva-border)] bg-[var(--aeva-surface-2)]">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" />
+                <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+                <span className="text-[10px] text-[var(--aeva-text-muted)] ml-2 font-mono">dispatch://aeva-mesh</span>
               </div>
-            </div>
-
-            <div className="bg-gray-950/60 rounded-lg p-4 text-sm text-gray-200 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
-              {result.response}
-            </div>
-
-            {/* Feedback */}
-            {!feedbackDone ? (
-              <div className="mt-4 border-t border-gray-700 pt-4">
-                <p className="text-gray-500 text-xs uppercase tracking-wide mb-2">Rate this response (helps Aeva self-improve)</p>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex gap-1">
-                    {[1,2,3,4,5].map(n => (
-                      <button key={n} onClick={() => setRating(n)}
-                        className={`w-7 h-7 rounded text-sm transition-colors ${feedbackRating >= n ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>
-                        ★
-                      </button>
-                    ))}
+              <form onSubmit={handleDispatch} className="p-4 space-y-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-green-400 text-xs font-mono">$</span>
+                    <span className="text-[var(--aeva-text-muted)] text-xs font-mono">dispatch.send(</span>
                   </div>
-                  <input type="text" value={feedbackNote} onChange={e => setFNNote(e.target.value)}
-                    placeholder="Optional note (e.g. 'routing was wrong, should be Clara')"
-                    className="flex-1 min-w-48 bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-1 text-sm focus:outline-none focus:border-blue-500" />
-                  <button onClick={submitFeedback}
-                    className="px-3 py-1 bg-green-700 hover:bg-green-600 text-white rounded-lg text-sm transition-colors">
-                    Submit
+                  <textarea
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    rows={3}
+                    placeholder="Describe the task to dispatch..."
+                    className="w-full bg-[var(--aeva-bg)] text-green-300 border border-[var(--aeva-border)] rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:border-green-500/50 focus:shadow-[0_0_12px_rgba(16,185,129,0.1)] transition-all placeholder-[var(--aeva-text-muted)] resize-none"
+                  />
+                </div>
+
+                {/* Context toggle */}
+                <div>
+                  <button type="button" onClick={() => setShowCtx(!showCtx)}
+                    className="text-[var(--aeva-text-muted)] text-[10px] font-mono hover:text-[var(--aeva-text-dim)] transition-colors">
+                    {showCtx ? '▼' : '▶'} context = {'{'}...{'}'}
+                  </button>
+                  {showCtx && (
+                    <textarea
+                      value={context}
+                      onChange={e => setContext(e.target.value)}
+                      rows={3}
+                      placeholder='{"project": "aevaos-api", "files": ["app.py"]}'
+                      className="w-full mt-2 bg-[var(--aeva-bg)] text-cyan-300 border border-[var(--aeva-border)] rounded-lg px-4 py-3 text-xs font-mono focus:outline-none focus:border-cyan-500/50 transition-all placeholder-[var(--aeva-text-muted)] resize-none"
+                    />
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[var(--aeva-text-muted)] text-xs font-mono">)</span>
+                  <button type="submit" disabled={sending || !message.trim()}
+                    className="px-5 py-2 bg-green-600/20 hover:bg-green-600/30 disabled:bg-[var(--aeva-surface)] disabled:text-[var(--aeva-text-muted)] text-green-400 border border-green-500/30 font-mono text-sm font-medium rounded-lg transition-all hover:shadow-[0_0_16px_rgba(16,185,129,0.12)]">
+                    {sending ? '⟳ dispatching...' : '→ dispatch'}
                   </button>
                 </div>
-              </div>
-            ) : (
-              <p className="mt-3 text-green-400 text-sm">✓ Feedback logged — Aeva will learn from this.</p>
-            )}
-          </div>
-        )}
+              </form>
+            </div>
 
-        {/* History */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-white font-semibold">Dispatch History</h2>
-            <button onClick={fetchHistory} className="text-gray-500 text-sm hover:text-gray-300">🔄 Refresh</button>
-          </div>
-          {historyLoading && <div className="text-gray-500 text-center py-8">Loading…</div>}
-          <div className="space-y-2">
-            {history.map((d, i) => {
-              const meta = agentStyle(d.agent);
-              return (
-                <div key={d.dispatch_id ?? d.id ?? i} className="bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition-colors">
-                  <div className="flex items-start gap-3">
-                    <span className="text-xl shrink-0">{meta.emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <span className={`text-sm font-medium capitalize ${meta.color}`}>{d.agent}</span>
-                        <span className="text-gray-600 text-xs">{d.model}</span>
-                        {d.classification?.type && (
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_BADGE[d.classification.type] ?? ''}`}>{d.classification.type}</span>
-                        )}
-                        {d.status === 'error' && <span className="text-red-400 text-xs">ERROR</span>}
-                        {d.status === 'dry_run' && <span className="text-yellow-500 text-xs">DRY RUN</span>}
-                        {d.latency_ms && <span className="text-gray-700 text-xs">{d.latency_ms}ms</span>}
-                        <span className="text-gray-700 text-xs ml-auto">{d.timestamp ? new Date(d.timestamp).toLocaleString() : ''}</span>
-                      </div>
-                      <p className="text-gray-400 text-sm truncate">{d.input_message}</p>
-                      {d.feedback?.rating && (
-                        <span className="text-yellow-500 text-xs">{'★'.repeat(d.feedback.rating)}</span>
-                      )}
+            {/* Result */}
+            {result && (
+              <div className="card-glow overflow-hidden animate-in">
+                {/* Result header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--aeva-border)] bg-[var(--aeva-surface-2)]">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{agentInfo?.emoji}</span>
+                    <div>
+                      <span className="text-white font-semibold text-sm">{agentInfo?.label}</span>
+                      <span className="text-[var(--aeva-text-muted)] text-xs ml-2 font-mono">{result.model?.split('/').pop()}</span>
                     </div>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                      result.status === 'success' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
+                    }`}>{result.status}</span>
+                    {result.latency_ms && <span className="text-[var(--aeva-text-muted)] text-[10px] font-mono">{(result.latency_ms / 1000).toFixed(1)}s</span>}
+                  </div>
                 </div>
-              );
-            })}
-            {!historyLoading && history.length === 0 && (
-              <div className="text-center text-gray-600 py-12 border border-dashed border-gray-800 rounded-xl">
-                No dispatches yet — send your first message above.
+
+                {/* Classification badges */}
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--aeva-border)] bg-[var(--aeva-surface)]/50 flex-wrap">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 capitalize">{result.classification?.task_type}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">complexity: {result.classification?.complexity}/10</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">confidence: {Math.round((result.classification?.confidence ?? 0) * 100)}%</span>
+                  {result.classification?.signals?.slice(0, 3).map((s, i) => (
+                    <span key={i} className="text-[10px] text-[var(--aeva-text-muted)]">#{s}</span>
+                  ))}
+                </div>
+
+                {/* Response with typewriter */}
+                <div ref={responseRef} className="p-4 max-h-[400px] overflow-y-auto">
+                  <pre className="text-[var(--aeva-text)] text-sm font-mono whitespace-pre-wrap leading-relaxed">
+                    {typedResponse}
+                    {typedResponse.length < (result.response?.length ?? 0) && <span className="typewriter-cursor">&nbsp;</span>}
+                  </pre>
+                </div>
+
+                {/* Feedback */}
+                <div className="px-4 py-3 border-t border-[var(--aeva-border)] bg-[var(--aeva-surface-2)]">
+                  {!ratingSent ? (
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-[var(--aeva-text-muted)] text-[10px] uppercase tracking-wider">Rate:</span>
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map(s => (
+                          <button key={s} onClick={() => setRating(s)}
+                            className={`text-lg transition-all duration-150 hover:scale-125 ${s <= rating ? 'opacity-100' : 'opacity-20'}`}>
+                            ⭐
+                          </button>
+                        ))}
+                      </div>
+                      {rating > 0 && (
+                        <>
+                          <input
+                            type="text" value={ratingNote} onChange={e => setRatingNote(e.target.value)}
+                            placeholder="Optional note..."
+                            className="flex-1 min-w-0 bg-[var(--aeva-bg)] text-[var(--aeva-text)] border border-[var(--aeva-border)] rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-[var(--aeva-blue)]"
+                          />
+                          <button onClick={sendRating}
+                            className="px-3 py-1.5 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-xs font-mono hover:bg-blue-600/30 transition-colors">
+                            Submit
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-green-400 text-xs font-mono">✓ Feedback logged — Aeva will learn from this</p>
+                  )}
+                </div>
               </div>
             )}
+          </div>
+
+          {/* Sidebar — history */}
+          <div className="animate-in animate-in-delay-2">
+            <h2 className="text-[var(--aeva-text-muted)] text-[10px] uppercase tracking-[0.2em] font-semibold mb-3">Dispatch History</h2>
+            <div className="space-y-2">
+              {history.length === 0 && (
+                <div className="card-glow p-6 text-center text-[var(--aeva-text-muted)] text-xs">No dispatches yet</div>
+              )}
+              {history.map((h, i) => {
+                const meta = AGENT_META[h.agent] ?? AGENT_META.aeva;
+                return (
+                  <div key={i} className="card-glow p-3 animate-in" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm">{meta.emoji}</span>
+                      <span className="text-xs font-medium" style={{ color: meta.color }}>{meta.label}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full ml-auto ${h.status === 'success' ? 'bg-green-400' : 'bg-red-400'}`} />
+                    </div>
+                    <p className="text-[var(--aeva-text)] text-xs truncate">{h.input_message}</p>
+                    {(h.classification?.type || h.classification?.task_type) && (
+                      <span className="text-[var(--aeva-text-muted)] text-[10px] font-mono">{h.classification.type ?? h.classification.task_type}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

@@ -1,26 +1,346 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AevaOS Design System — Hyper-Futuristic Theme
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Core palette */
+  --aeva-bg:           #050510;
+  --aeva-surface:      #0a0a1a;
+  --aeva-surface-2:    #0f0f24;
+  --aeva-border:       #1a1a3e;
+  --aeva-border-hover: #2a2a5e;
+  --aeva-text:         #e0e0ff;
+  --aeva-text-dim:     #6a6a9e;
+  --aeva-text-muted:   #3a3a6e;
+
+  /* Accent colors */
+  --aeva-blue:         #3b82f6;
+  --aeva-blue-glow:    rgba(59, 130, 246, 0.15);
+  --aeva-purple:       #8b5cf6;
+  --aeva-purple-glow:  rgba(139, 92, 246, 0.12);
+  --aeva-cyan:         #06b6d4;
+  --aeva-cyan-glow:    rgba(6, 182, 212, 0.1);
+  --aeva-green:        #10b981;
+  --aeva-pink:         #ec4899;
+  --aeva-amber:        #f59e0b;
+  --aeva-red:          #ef4444;
+
+  /* Glass */
+  --glass-bg:          rgba(10, 10, 30, 0.7);
+  --glass-border:      rgba(255, 255, 255, 0.06);
+  --glass-blur:        16px;
+
+  /* Spacing */
+  --background: #050510;
+  --foreground: #e0e0ff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ─── Base ─────────────────────────────────────────────────────────────── */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--aeva-bg);
+  color: var(--aeva-text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: #fff;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--aeva-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--aeva-border-hover);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 1. Pulse Glow — active status, live indicators */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px currentColor, 0 0 8px currentColor; opacity: 1; }
+  50%      { box-shadow: 0 0 8px currentColor, 0 0 20px currentColor; opacity: 0.7; }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* 2. Gradient Border — cards on hover */
+@keyframes gradient-rotate {
+  0%   { --angle: 0deg; }
+  100% { --angle: 360deg; }
+}
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.card-glow {
+  position: relative;
+  background: var(--aeva-surface);
+  border: 1px solid var(--aeva-border);
+  border-radius: 16px;
+  transition: all 0.3s ease;
+}
+.card-glow::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  padding: 1px;
+  background: conic-gradient(from var(--angle), transparent 60%, var(--aeva-blue) 75%, var(--aeva-purple) 85%, transparent 95%);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  animation: gradient-rotate 3s linear infinite;
+}
+.card-glow:hover::before {
+  opacity: 1;
+}
+.card-glow:hover {
+  background: var(--aeva-surface-2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.08);
+}
+
+/* 3. Float — logo, hero elements */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-8px); }
+}
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* 4. Scan Line — page headers */
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 0.5; }
+  90%  { opacity: 0.5; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+.scan-line {
+  position: relative;
+  overflow: hidden;
+}
+.scan-line::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--aeva-cyan), transparent);
+  animation: scan-line 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* 5. Text Shimmer — key titles and numbers */
+@keyframes text-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.text-shimmer {
+  background: linear-gradient(90deg, var(--aeva-text) 25%, var(--aeva-cyan) 50%, var(--aeva-text) 75%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: text-shimmer 4s ease-in-out infinite;
+}
+
+/* 6. Orbital — dispatch active agent */
+@keyframes orbital {
+  0%   { transform: rotate(0deg) translateX(28px) rotate(0deg); }
+  100% { transform: rotate(360deg) translateX(28px) rotate(-360deg); }
+}
+.animate-orbital {
+  animation: orbital 3s linear infinite;
+}
+
+/* 7. Data Stream — activity feed side accent */
+@keyframes data-stream {
+  0%   { background-position: 0% 0%; }
+  100% { background-position: 0% -200%; }
+}
+.data-stream-border {
+  border-left: 2px solid transparent;
+  border-image: linear-gradient(180deg, var(--aeva-blue), transparent 30%, transparent 70%, var(--aeva-purple)) 1;
+  animation: data-stream 6s linear infinite;
+}
+
+/* 8. Typewriter — dispatch response */
+@keyframes typewriter-cursor {
+  0%, 100% { border-right-color: var(--aeva-cyan); }
+  50%      { border-right-color: transparent; }
+}
+.typewriter-cursor {
+  border-right: 2px solid var(--aeva-cyan);
+  animation: typewriter-cursor 1s step-end infinite;
+}
+
+/* 9. Fade/Slide Up — all page content entrance */
+@keyframes fade-slide-up {
+  0%   { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-in {
+  animation: fade-slide-up 0.5s ease-out both;
+}
+.animate-in-delay-1 { animation-delay: 0.1s; }
+.animate-in-delay-2 { animation-delay: 0.2s; }
+.animate-in-delay-3 { animation-delay: 0.3s; }
+.animate-in-delay-4 { animation-delay: 0.4s; }
+
+/* 10. Particle Drift — login background */
+@keyframes particle-drift {
+  0%   { transform: translate(0, 0) scale(1);   opacity: 0; }
+  10%  { opacity: 0.6; }
+  90%  { opacity: 0.6; }
+  100% { transform: translate(80px, -120px) scale(0.4); opacity: 0; }
+}
+.particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--aeva-blue);
+  animation: particle-drift linear infinite;
+  pointer-events: none;
+}
+
+/* 11. Aurora — login/hero backgrounds */
+@keyframes aurora {
+  0%   { transform: rotate(0deg) scale(1); }
+  33%  { transform: rotate(120deg) scale(1.1); }
+  66%  { transform: rotate(240deg) scale(0.9); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.aurora {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  animation: aurora 20s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* 12. Heartbeat line — agent cards */
+@keyframes heartbeat-line {
+  0%   { stroke-dashoffset: 100; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* 13. Counter tick — animated numbers */
+@keyframes counter-pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.counter-pop {
+  animation: counter-pop 0.3s ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UTILITY CLASSES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Glass card */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+/* Glow text variants */
+.glow-blue   { text-shadow: 0 0 12px rgba(59, 130, 246, 0.5); }
+.glow-purple { text-shadow: 0 0 12px rgba(139, 92, 246, 0.5); }
+.glow-cyan   { text-shadow: 0 0 12px rgba(6, 182, 212, 0.5); }
+.glow-green  { text-shadow: 0 0 12px rgba(16, 185, 129, 0.5); }
+
+/* Gradient text */
+.gradient-text-blue-purple {
+  background: linear-gradient(135deg, var(--aeva-blue), var(--aeva-purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.gradient-text-cyan-blue {
+  background: linear-gradient(135deg, var(--aeva-cyan), var(--aeva-blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Gradient borders */
+.border-gradient {
+  border: 1px solid transparent;
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+/* Neon dot */
+.neon-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 4px currentColor, 0 0 8px currentColor;
+}
+
+/* Subtle grid background */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Noise texture overlay */
+.noise::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Focus ring override */
+*:focus-visible {
+  outline: 2px solid var(--aeva-blue);
+  outline-offset: 2px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

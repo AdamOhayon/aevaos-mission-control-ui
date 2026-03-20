@@ -1,9 +1,92 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'https://api-production-194a.up.railway.app';
+
+function ParticleField() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animId: number;
+    const particles: { x: number; y: number; vx: number; vy: number; size: number; alpha: number; color: string }[] = [];
+    const colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981'];
+
+    function resize() {
+      canvas!.width = window.innerWidth;
+      canvas!.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Spawn particles
+    for (let i = 0; i < 60; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        size: Math.random() * 2 + 0.5,
+        alpha: Math.random() * 0.4 + 0.1,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      });
+    }
+
+    function draw() {
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0) p.x = canvas!.width;
+        if (p.x > canvas!.width) p.x = 0;
+        if (p.y < 0) p.y = canvas!.height;
+        if (p.y > canvas!.height) p.y = 0;
+
+        ctx!.beginPath();
+        ctx!.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx!.fillStyle = p.color;
+        ctx!.globalAlpha = p.alpha;
+        ctx!.fill();
+      });
+
+      // Draw connections
+      ctx!.globalAlpha = 0.04;
+      ctx!.strokeStyle = '#3b82f6';
+      ctx!.lineWidth = 0.5;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            ctx!.beginPath();
+            ctx!.moveTo(particles[i].x, particles[i].y);
+            ctx!.lineTo(particles[j].x, particles[j].y);
+            ctx!.stroke();
+          }
+        }
+      }
+      ctx!.globalAlpha = 1;
+
+      animId = requestAnimationFrame(draw);
+    }
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }} />;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,7 +108,6 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Invalid password');
 
-      // Store token in localStorage (for API bearer auth) AND as a cookie (for middleware)
       localStorage.setItem('aevaos_token', data.token);
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
       document.cookie = `aevaos_token=${data.token}; expires=${expires}; path=/; SameSite=Strict`;
@@ -40,26 +122,27 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      {/* Ambient glows */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600/8 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 left-1/4 w-72 h-72 bg-purple-600/6 rounded-full blur-3xl" />
-      </div>
+    <div className="min-h-screen bg-[var(--aeva-bg)] flex items-center justify-center p-4 overflow-hidden">
+      <ParticleField />
 
-      <div className={`relative w-full max-w-sm ${shake ? 'animate-shake' : ''}`}>
+      {/* Aurora blobs */}
+      <div className="aurora w-[600px] h-[600px] bg-blue-600/[0.06] top-0 left-1/4" style={{ animationDuration: '25s' }} />
+      <div className="aurora w-[500px] h-[500px] bg-purple-600/[0.05] bottom-0 right-1/4" style={{ animationDuration: '20s', animationDelay: '-8s' }} />
+      <div className="aurora w-[400px] h-[400px] bg-cyan-500/[0.04] top-1/2 left-1/2" style={{ animationDuration: '30s', animationDelay: '-15s' }} />
+
+      <div className={`relative z-10 w-full max-w-sm animate-in ${shake ? 'animate-shake' : ''}`}>
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="text-6xl mb-4 drop-shadow-lg">🌀</div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">AevaOS</h1>
-          <p className="text-gray-500 mt-1 text-sm tracking-wide">Mission Control</p>
+        <div className="text-center mb-10">
+          <div className="text-7xl mb-4 animate-float">🌀</div>
+          <h1 className="text-4xl font-extrabold text-shimmer tracking-tight">AevaOS</h1>
+          <p className="text-[var(--aeva-text-muted)] mt-2 text-xs tracking-[0.3em] uppercase">Mission Control</p>
         </div>
 
         {/* Card */}
-        <div className="bg-gray-900/80 backdrop-blur-sm border border-gray-800 rounded-2xl p-8 shadow-2xl">
+        <div className="glass rounded-2xl p-8 shadow-2xl shadow-black/40">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="password" className="text-gray-400 text-xs uppercase tracking-wider block mb-2">
+              <label htmlFor="password" className="text-[var(--aeva-text-dim)] text-[10px] uppercase tracking-[0.2em] block mb-2">
                 Access Password
               </label>
               <input
@@ -70,12 +153,12 @@ export default function LoginPage() {
                 autoFocus
                 required
                 placeholder="••••••••••••"
-                className="w-full bg-gray-800 text-white border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all placeholder-gray-600"
+                className="w-full bg-[var(--aeva-surface)] text-white border border-[var(--aeva-border)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--aeva-blue)] focus:shadow-[0_0_12px_rgba(59,130,246,0.15)] transition-all placeholder-[var(--aeva-text-muted)]"
               />
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 bg-red-950/60 border border-red-800/50 rounded-lg px-3 py-2.5 text-red-400 text-sm">
+              <div className="flex items-center gap-2 bg-red-950/40 border border-red-800/40 rounded-lg px-3 py-2.5 text-red-400 text-sm">
                 <span>⚠</span>
                 <span>{error}</span>
               </div>
@@ -84,7 +167,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !password}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 text-white font-semibold rounded-xl transition-all duration-150 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-[var(--aeva-surface)] disabled:text-[var(--aeva-text-muted)] text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 hover:shadow-[0_0_24px_rgba(59,130,246,0.2)]"
             >
               {loading
                 ? <><span className="animate-spin inline-block">⟳</span> Authenticating…</>
@@ -94,7 +177,9 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-gray-700 text-xs mt-5">AevaOS v1.5.0 · Protected</p>
+        <p className="text-center text-[var(--aeva-text-muted)] text-[10px] mt-6 tracking-widest uppercase">
+          v1.5.0 · Secured
+        </p>
       </div>
 
       <style jsx global>{`
