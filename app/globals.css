@@ -7,14 +7,14 @@
 
 :root {
   /* Core palette */
-  --aeva-bg:           #050510;
-  --aeva-surface:      #0a0a1a;
-  --aeva-surface-2:    #0f0f24;
-  --aeva-border:       #1a1a3e;
-  --aeva-border-hover: #2a2a5e;
-  --aeva-text:         #e0e0ff;
-  --aeva-text-dim:     #6a6a9e;
-  --aeva-text-muted:   #3a3a6e;
+  --aeva-bg:           #080818;
+  --aeva-surface:      #10101e;
+  --aeva-surface-2:    #161628;
+  --aeva-border:       #252550;
+  --aeva-border-hover: #353580;
+  --aeva-text:         #e8e8ff;
+  --aeva-text-dim:     #9090c0;
+  --aeva-text-muted:   #5858a0;
 
   /* Accent colors */
   --aeva-blue:         #3b82f6;
@@ -29,8 +29,8 @@
   --aeva-red:          #ef4444;
 
   /* Glass */
-  --glass-bg:          rgba(10, 10, 30, 0.7);
-  --glass-border:      rgba(255, 255, 255, 0.06);
+  --glass-bg:          rgba(16, 16, 38, 0.8);
+  --glass-border:      rgba(255, 255, 255, 0.10);
   --glass-blur:        16px;
 
   /* Spacing */

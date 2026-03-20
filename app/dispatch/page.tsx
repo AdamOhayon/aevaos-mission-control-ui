@@ -112,7 +112,7 @@ export default function DispatchPage() {
           <div className="lg:col-span-2 space-y-4">
 
             {/* Input form — terminal style */}
-            <div className="card-glow overflow-hidden animate-in animate-in-delay-1">
+            <div className="card-glow animate-in animate-in-delay-1" style={{ overflow: 'visible' }}>
               {/* Terminal header */}
               <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--aeva-border)] bg-[var(--aeva-surface-2)]">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
@@ -129,9 +129,10 @@ export default function DispatchPage() {
                   <textarea
                     value={message}
                     onChange={e => setMessage(e.target.value)}
-                    rows={3}
+                    rows={4}
                     placeholder="Describe the task to dispatch..."
-                    className="w-full bg-[var(--aeva-bg)] text-green-300 border border-[var(--aeva-border)] rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:border-green-500/50 focus:shadow-[0_0_12px_rgba(16,185,129,0.1)] transition-all placeholder-[var(--aeva-text-muted)] resize-none"
+                    className="w-full bg-[var(--aeva-surface-2)] text-green-200 border border-[var(--aeva-border)] rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:border-green-500/60 focus:shadow-[0_0_16px_rgba(16,185,129,0.15)] transition-all placeholder-[var(--aeva-text-muted)] resize-none"
+                    style={{ position: 'relative', zIndex: 10 }}
                   />
                 </div>
 
