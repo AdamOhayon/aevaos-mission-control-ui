@@ -1,0 +1,95 @@
+{
+  "updated": "2026-03-29T18:00:00Z",
+  "projects": [
+    {
+      "id": "mc-ui",
+      "name": "Mission Control UI",
+      "status": "deployed",
+      "health": "healthy",
+      "repository": "https://github.com/adamohayon/aevaos-mission-control-ui",
+      "deployment": {
+        "platform": "Vercel",
+        "url": "https://aevaos-mission-control-ui.vercel.app",
+        "status": "live",
+        "lastDeployed": "2026-03-19"
+      },
+      "completionDate": "2026-03-19",
+      "description": "Next.js frontend for AevaOS Mission Control - dashboard, projects, tasks, office, auth",
+      "technologies": ["Next.js", "TypeScript", "Tailwind CSS", "React"],
+      "notes": "Feature-complete. All routes working. Uses mock data until API is live."
+    },
+    {
+      "id": "mc-api",
+      "name": "Mission Control API",
+      "status": "blocked",
+      "health": "warning",
+      "repository": "https://github.com/adamohayon/aevaos-mission-control-api",
+      "deployment": {
+        "platform": "Railway",
+        "url": null,
+        "status": "pending",
+        "blocker": "Environment variables not set"
+      },
+      "completionDate": null,
+      "description": "Flask backend with JWT auth, PostgreSQL, projects/tasks CRUD",
+      "technologies": ["Flask", "SQLAlchemy", "PostgreSQL", "JWT"],
+      "notes": "Code complete. Needs Railway env vars (SECRET_KEY, JWT_SECRET_KEY, CORS_ORIGINS) and database seeding."
+    },
+    {
+      "id": "lifetrack",
+      "name": "LifeTrack",
+      "status": "audit-complete",
+      "health": "healthy",
+      "repository": "https://github.com/adamohayon/lifetrack",
+      "deployment": {
+        "platform": null,
+        "url": null,
+        "status": "not-deployed"
+      },
+      "completionDate": null,
+      "description": "Digital Twin personality engine - current Flutter/Firebase, migrating to Node/Next.js",
+      "technologies": ["Flutter", "Firebase", "TypeScript", "Dart"],
+      "notes": "TASK-008 completed. IP documented in DIGITAL_TWIN_IP.md. Core algorithms extracted to @lifetrack/digital-twin-core package. Migration plan defined: 6-8 weeks to Next.js + Node.js + PostgreSQL."
+    },
+    {
+      "id": "digital-twin-core",
+      "name": "Digital Twin Core Package",
+      "status": "extracted",
+      "health": "healthy",
+      "repository": null,
+      "deployment": {
+        "platform": "NPM",
+        "url": null,
+        "status": "local-only"
+      },
+      "completionDate": "2026-03-23",
+      "description": "TypeScript package with pure Digital Twin algorithms (scoring, completion, context generation)",
+      "technologies": ["TypeScript", "Jest"],
+      "notes": "Zero dependencies. 90+ unit tests. Ready for Node.js integration. Located at /data/workspace/digital-twin-core/"
+    },
+    {
+      "id": "lifeos",
+      "name": "LifeOS Framework",
+      "status": "planning",
+      "health": "not-started",
+      "repository": null,
+      "deployment": {
+        "platform": null,
+        "url": null,
+        "status": "not-started"
+      },
+      "completionDate": null,
+      "description": "Open-source framework for the world - the public movement",
+      "technologies": ["TBD"],
+      "notes": "Awaiting LifeTrack migration completion and AevaOS stabilization before starting."
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "deployed": 1,
+    "blocked": 1,
+    "in_progress": 0,
+    "planning": 1,
+    "complete": 2
+  }
+}
